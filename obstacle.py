@@ -90,7 +90,11 @@ recognizer = sr.Recognizer()
 # The Pi's ALSA "default" input device resolves to the HDMI output (card 0),
 # which has no real microphone, so recognize_google() never gets usable
 # audio. Select the webcam's USB mic (the only real capture device) directly.
-mic = sr.Microphone(device_index=_find_webcam_mic_index())
+_webcam_mic_index = _find_webcam_mic_index()
+_mic_names = sr.Microphone.list_microphone_names()
+_selected_name = _mic_names[_webcam_mic_index] if _webcam_mic_index is not None else "<default, webcam not found>"
+print(f"Using microphone device index {_webcam_mic_index}: {_selected_name}")
+mic = sr.Microphone(device_index=_webcam_mic_index)
 
 
 def listen_for_query():
@@ -113,7 +117,16 @@ def listen_for_query():
         except sr.WaitTimeoutError:
             pass
         except sr.UnknownValueError:
-            print("Heard audio but couldn't understand it")
+            # Temporary diagnostic: save what was actually captured so we can
+            # inspect it directly, since the mic hardware itself tests fine
+            # elsewhere (e.g. Google Meet) but recognize_google() keeps failing.
+            debug_path = f"{RECORDINGS_DIR}/debug_audio_{time.strftime('%Y%m%d_%H%M%S')}.wav"
+            try:
+                with open(debug_path, "wb") as f:
+                    f.write(audio.get_wav_data())
+                print(f"Heard audio but couldn't understand it (saved {debug_path})")
+            except OSError as e:
+                print(f"Heard audio but couldn't understand it (couldn't save debug audio: {e})")
         except sr.RequestError as e:
             print(f"Speech recognition error (check internet): {e}")
 
