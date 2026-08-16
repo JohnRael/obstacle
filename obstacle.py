@@ -3,6 +3,7 @@ import time
 import threading
 import subprocess
 import collections
+import audioop
 from ultralytics import YOLO
 import speech_recognition as sr
 
@@ -86,6 +87,37 @@ def _find_webcam_mic_index():
     return None
 
 
+class StereoMicrophone(sr.Microphone):
+    """sr.Microphone always opens its capture stream as mono (hardcoded in
+    the library), but `arecord --dump-hw-params` shows the webcam mic only
+    supports CHANNELS: 2 - it has no mono mode. Opening the raw hw:2,0
+    device with a mono request that the hardware can't actually provide is
+    what produced garbled audio, even though the same mic works fine
+    elsewhere (e.g. a laptop's own audio stack, which auto-converts).
+    This overrides the stream to open at the device's real channel count;
+    listen_for_query() downmixes the resulting stereo audio to mono before
+    handing it to recognize_google()."""
+
+    def __enter__(self):
+        assert self.stream is None, "This audio source is already inside a context manager"
+        self.audio = self.pyaudio_module.PyAudio()
+        try:
+            self.stream = sr.Microphone.MicrophoneStream(
+                self.audio.open(
+                    input_device_index=self.device_index,
+                    channels=2,
+                    format=self.format,
+                    rate=self.SAMPLE_RATE,
+                    frames_per_buffer=self.CHUNK,
+                    input=True,
+                )
+            )
+        except Exception:
+            self.audio.terminate()
+            raise
+        return self
+
+
 recognizer = sr.Recognizer()
 # The Pi's ALSA "default" input device resolves to the HDMI output (card 0),
 # which has no real microphone, so recognize_google() never gets usable
@@ -94,7 +126,7 @@ _webcam_mic_index = _find_webcam_mic_index()
 _mic_names = sr.Microphone.list_microphone_names()
 _selected_name = _mic_names[_webcam_mic_index] if _webcam_mic_index is not None else "<default, webcam not found>"
 print(f"Using microphone device index {_webcam_mic_index}: {_selected_name}")
-mic = sr.Microphone(device_index=_webcam_mic_index)
+mic = StereoMicrophone(device_index=_webcam_mic_index)
 
 
 def listen_for_query():
@@ -106,6 +138,10 @@ def listen_for_query():
         try:
             with mic as source:
                 audio = recognizer.listen(source, timeout=5, phrase_time_limit=4)
+            # StereoMicrophone captures real 2-channel audio; downmix to mono
+            # before recognition (and before the debug save below).
+            mono_data = audioop.tomono(audio.get_raw_data(), audio.sample_width, 0.5, 0.5)
+            audio = sr.AudioData(mono_data, audio.sample_rate, audio.sample_width)
             print("Heard something, recognizing...")
             text = recognizer.recognize_google(audio).lower()
             print(f"You said: {text}")
