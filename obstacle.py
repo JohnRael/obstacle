@@ -126,7 +126,10 @@ _webcam_mic_index = _find_webcam_mic_index()
 _mic_names = sr.Microphone.list_microphone_names()
 _selected_name = _mic_names[_webcam_mic_index] if _webcam_mic_index is not None else "<default, webcam not found>"
 print(f"Using microphone device index {_webcam_mic_index}: {_selected_name}")
-mic = StereoMicrophone(device_index=_webcam_mic_index)
+# The device advertises RATE: [8000 48000] but only genuinely captures
+# cleanly at 8000 - PyAudio's auto-detected default rate produced sped-up/
+# garbled audio (confirmed via arecord -r 16000/48000 vs -r 8000 A/B tests).
+mic = StereoMicrophone(device_index=_webcam_mic_index, sample_rate=8000)
 
 
 def listen_for_query():
