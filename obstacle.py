@@ -79,8 +79,18 @@ def new_writer():
     return cv2.VideoWriter(path, cv2.VideoWriter_fourcc(*'mp4v'), RECORD_FPS, (640, 480)), path
 
 
+def _find_webcam_mic_index():
+    for index, name in enumerate(sr.Microphone.list_microphone_names()):
+        if "webcam" in name.lower():
+            return index
+    return None
+
+
 recognizer = sr.Recognizer()
-mic = sr.Microphone()
+# The Pi's ALSA "default" input device resolves to the HDMI output (card 0),
+# which has no real microphone, so recognize_google() never gets usable
+# audio. Select the webcam's USB mic (the only real capture device) directly.
+mic = sr.Microphone(device_index=_find_webcam_mic_index())
 
 
 def listen_for_query():
