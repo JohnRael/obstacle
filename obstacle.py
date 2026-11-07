@@ -356,44 +356,30 @@ SCENE_PHRASES = (
     "where am i", "where are we", "what room", "what place", "what scene",
     "what kind of room", "what kind of place", "what kind of area",
     "describe the scene", "describe the scenery", "scenery", "my surroundings",
-    "what is around me", "what do you see around me", "describe my surroundings",
-    "what is my location", "what environment am i in",
 )
 
 
 def handle_voice_query(text):
-    text = re.sub(r"\s+", " ", re.sub(r"[^a-z0-9\s']", " ", text.lower())).strip()
-
-    # Check specific intents first so questions mentioning multiple topics are
-    # not accidentally treated as object-identification requests.
-    if re.search(r"\b(weather|temperature|forecast|rain)\b", text):
+    # Date / time / weather / scene are checked first so phrases like
+    # "what time is it" can't be mistaken for the object question "what is it".
+    if "weather" in text or "temperature" in text:
         speak(answer_weather())
+    elif re.search(r"\bdate\b", text) or "what day" in text or "day is it" in text:
+        speak(answer_date())
     elif re.search(r"\btime\b", text):
         speak(answer_time())
-    elif re.search(r"\b(date|day|today|weekday|tomorrow)\b", text):
-        speak(answer_date())
-    elif any(phrase in text for phrase in SCENE_PHRASES) or re.search(
-        r"\b(room|place|scene|area|surroundings|environment|location)\b", text
-    ):
+    elif any(phrase in text for phrase in SCENE_PHRASES):
         speak(answer_scene())
-    elif any(phrase in text for phrase in (
-        "what is it", "what is this", "what do you see", "what can you see",
-        "what kind of object", "identify",
-    )) or re.search(r"\b(objects?|obstacles?)\b", text):
+    elif "what kind of object" in text or "what is it" in text:
         if last_close_object:
             speak(f"It looks like a {last_close_object}")
         else:
             speak("Nothing detected right now")
-    else:
-        speak(
-            "I can tell you the time, date, weather, what I see nearby, "
-            "or what kind of place this looks like"
-        )
 
 
 def _find_webcam_mic_index():
     for index, name in enumerate(sr.Microphone.list_microphone_names()):
-        if "webcam" in name.lower():
+        if "mwb" in name.lower():
             return index
     return None
 
